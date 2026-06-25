@@ -3,7 +3,7 @@ import { AppointmentsService } from '../services/appointments.service';
 import { AppointmentsRepository } from '../repositories/appointments.repository';
 import { ClientsRepository } from '../repositories/clients.repository';
 import { ServicesRepository } from '../repositories/services.repository';
-import { getAuthClient } from '../integrations/supabase/client';
+import { getAuthClient, supabaseService } from '../integrations/supabase/client';
 import {
   createAppointmentSchema,
   cancelAppointmentSchema,
@@ -109,6 +109,33 @@ export const appointmentsController = {
       const svc = makeService(req);
       const appt = await svc.markNoShow(req.params['id']!, req.ctx.shopId);
       ok(res, appt);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async dashboardList(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const shopId = req.ctx.shopId;
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+      const { data, error } = await supabaseService
+        .from('appointments')
+        .select(`
+          id, scheduled_at, ends_at, status, notes, source,
+          clients(full_name, phone),
+          services(name, price, duration_minutes),
+          users!appointments_barber_id_fkey(full_name)
+        `)
+        .eq('shop_id', shopId)
+        .gte('scheduled_at', `${today}T00:00:00`)
+        .order('scheduled_at', { ascending: true })
+        .limit(100);
+
+      if (error) {
+        next(error);
+        return;
+      }
+      ok(res, data ?? []);
     } catch (err) {
       next(err);
     }

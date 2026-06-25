@@ -65,7 +65,12 @@ const chat = Router();
 chat.use(chatAuthMiddleware);
 chat.post('/chat', aiLimiter, aiController.chat);
 
+const dashboardPublic = Router();
+dashboardPublic.use(chatAuthMiddleware);
+dashboardPublic.get('/appointments', appointmentsController.dashboardList);
+
 router.use('/public', chat);
+router.use('/public/dashboard', dashboardPublic);
 
 router.use(auth);
 
