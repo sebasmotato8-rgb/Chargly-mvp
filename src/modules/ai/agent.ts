@@ -32,10 +32,18 @@ export interface AgentOutput {
   escalated: boolean;
 }
 
+const promptCache = new Map<string, { prompt: string; expiresAt: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
 async function buildSystemPrompt(
   shopId: string,
   db: DbClient
 ): Promise<string> {
+  const cached = promptCache.get(shopId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.prompt;
+  }
+
   const servicesRepo = new ServicesRepository(db);
   const configRepo = new BusinessConfigRepository(db);
 
@@ -56,45 +64,63 @@ async function buildSystemPrompt(
   });
 
   const servicesCatalog = (services as Service[])
-    .map((s) => `  - ${s.name} [id: ${s.id}]: $${s.price.toLocaleString('es-CO')} — ${s.duration_minutes} min${s.description ? ` (${s.description})` : ''}`)
+    .map((s) => `- ${s.name} [${s.id}]: $${s.price.toLocaleString('es-CO')} ${s.duration_minutes}min`)
     .join('\n');
 
   const barbersList = (barbersRow.data ?? [])
-    .map((b) => `  - ${b.full_name} [id: ${b.id}]${b.bio ? ` — ${b.bio}` : ''}`)
+    .map((b) => `- ${b.full_name} [${b.id}]`)
     .join('\n');
 
-  return `Eres el asistente virtual de **${shop?.name ?? 'Zac Barber'}**, una barbería premium.
-Tu nombre es **BarberBot** y tu objetivo es ayudar a los clientes a reservar, cancelar y reagendar citas de forma rápida y amable.
+  const prompt = `Eres BarberBot, asistente de ${shop?.name ?? 'Zac Barber'}.
+Ayudas a reservar, cancelar y reagendar citas.
 
-INFORMACIÓN DEL NEGOCIO
-Nombre: ${shop?.name ?? 'Zac Barber'}
-Dirección: ${shop?.address ?? ''}, ${shop?.city ?? ''}
-Teléfono: ${shop?.phone ?? ''}
-Hoy es: ${today}
+NEGOCIO: ${shop?.name ?? 'Zac Barber'} | ${shop?.address ?? ''}, ${shop?.city ?? ''} | Tel: ${shop?.phone ?? ''}
+Hoy: ${today}
 
-CATÁLOGO DE SERVICIOS
-${servicesCatalog || '  (Sin servicios configurados)'}
+SERVICIOS
+${servicesCatalog || '(Sin servicios)'}
 
-BARBEROS DISPONIBLES
-${barbersList || '  (Sin barberos configurados)'}
+BARBEROS
+${barbersList || '(Sin barberos)'}
 
-REGLAS DE COMPORTAMIENTO
-1. Sé amable, profesional y conciso. Máximo 3 oraciones por respuesta.
-2. SIEMPRE llama las tools disponibles cuando tengas la información necesaria. NUNCA pidas permiso para llamar una tool ni le digas al usuario que vas a llamar una función. Simplemente llámala y responde con el resultado.
-3. Para reservar una cita necesitas: nombre completo, teléfono, servicio, barbero y fecha/hora. Si falta algún dato, pregúntalo.
-4. Antes de crear una cita, SIEMPRE llama get_availability para confirmar que el slot existe.
-5. Para cancelar o reagendar, primero llama find_client_appointments con el teléfono del cliente para encontrar la cita. Confirma con el usuario antes de cancelar.
-6. Si el cliente no tiene preferencia de barbero, sugiere el primero de la lista.
-7. Si no puedes resolver algo en 3 intentos, usa escalate_to_human.
-8. NUNCA inventes precios, horarios o información. Usa SOLO datos de este prompt o resultados de las tools.
-9. Responde siempre en español colombiano informal pero respetuoso.
-10. Usa emojis con moderación (máximo 1-2 por mensaje).
-11. Si el usuario pide disponibilidad sin especificar servicio, pregunta qué servicio desea. Los IDs de servicios y barberos están arriba — úsalos directamente.
+REGLAS
+1. Sé amable, conciso. Máximo 3 oraciones.
+2. Llama tools directamente, nunca pidas permiso.
+3. Para reservar necesitas: nombre, teléfono, servicio, barbero, fecha/hora.
+4. Antes de crear cita, llama get_availability.
+5. Para cancelar/reagendar, usa find_client_appointments con el teléfono.
+6. Sin preferencia de barbero, sugiere el primero.
+7. NUNCA inventes datos. Usa solo este prompt o resultados de tools.
+8. Responde en español colombiano informal y respetuoso.
+9. Si no puedes resolver en 3 intentos, usa escalate_to_human.
 
-CONFIGURACIÓN OPERATIVA
-Anticipación mínima para reservar: ${config['booking.min_advance_minutes'] ?? '60'} minutos
-Máximo días en adelanto: ${config['booking.max_advance_days'] ?? '30'} días
-Duración de slots: ${config['booking.slot_duration_minutes'] ?? '30'} minutos`;
+CONFIG: Min anticipación ${config['booking.min_advance_minutes'] ?? '60'}min | Max ${config['booking.max_advance_days'] ?? '30'} días | Slots ${config['booking.slot_duration_minutes'] ?? '30'}min`;
+
+  promptCache.set(shopId, { prompt, expiresAt: Date.now() + CACHE_TTL_MS });
+  return prompt;
+}
+
+async function callGroqWithRetry(
+  params: Parameters<typeof groq.chat.completions.create>[0],
+  maxRetries: number = 2
+): Promise<Groq.Chat.ChatCompletion> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await groq.chat.completions.create(params) as Groq.Chat.ChatCompletion;
+    } catch (err: unknown) {
+      const status = (err as { status?: number }).status;
+
+      if (status === 429 && attempt < maxRetries) {
+        const delayMs = (attempt + 1) * 2000;
+        logger.warn({ attempt, delayMs }, 'Groq 429, retrying after delay');
+        await new Promise((r) => setTimeout(r, delayMs));
+        continue;
+      }
+
+      throw err;
+    }
+  }
+  throw new Error('Unreachable');
 }
 
 export async function runBarberAgent(input: AgentInput): Promise<AgentOutput> {
@@ -117,6 +143,7 @@ export async function runBarberAgent(input: AgentInput): Promise<AgentOutput> {
   const toolsUsed: string[] = [];
   let escalated = false;
   let finalReply = '';
+  let lastPartialContent = '';
   let iterations = 0;
 
   while (iterations < env.GROQ_MAX_ITERATIONS) {
@@ -124,7 +151,7 @@ export async function runBarberAgent(input: AgentInput): Promise<AgentOutput> {
 
     let completion: Groq.Chat.ChatCompletion;
     try {
-      completion = await groq.chat.completions.create({
+      completion = await callGroqWithRetry({
         model: env.GROQ_MODEL,
         messages,
         tools: BARBER_TOOLS,
@@ -135,14 +162,29 @@ export async function runBarberAgent(input: AgentInput): Promise<AgentOutput> {
     } catch (err: unknown) {
       const status = (err as { status?: number }).status;
       if (status === 429) {
-        logger.warn({ shopId }, 'Groq rate limit exceeded (429)');
-        finalReply = 'Estamos experimentando alta demanda. Por favor intenta de nuevo en unos minutos.';
+        logger.warn({ shopId }, 'Groq rate limit exceeded after retries');
+        finalReply = lastPartialContent || 'Tenemos mucha demanda en este momento. Intenta de nuevo en un minuto. 🙏';
         break;
       }
       if (status === 400) {
-        logger.warn({ shopId, iterations }, 'Groq tool_use_failed (400), retrying without tools');
-        messages.push({ role: 'user', content: 'Por favor responde sin usar herramientas por ahora. Usa los datos que ya tienes del prompt del sistema.' });
-        continue;
+        logger.warn({ shopId, iterations }, 'Groq 400, retrying without tools');
+        try {
+          const fallback = await callGroqWithRetry({
+            model: env.GROQ_MODEL,
+            messages,
+            max_tokens: env.GROQ_MAX_TOKENS,
+            temperature: 0.3,
+          });
+          finalReply = (fallback.choices[0]?.message?.content ?? '').trim();
+          const usage = fallback.usage;
+          if (usage) {
+            totalInputTokens += usage.prompt_tokens ?? 0;
+            totalOutputTokens += usage.completion_tokens ?? 0;
+          }
+        } catch {
+          finalReply = lastPartialContent || 'Tuve un problema procesando tu solicitud. ¿Puedes intentarlo de nuevo?';
+        }
+        break;
       }
       throw err;
     }
@@ -161,6 +203,10 @@ export async function runBarberAgent(input: AgentInput): Promise<AgentOutput> {
 
     const assistantMsg = choice.message;
     const toolCalls = assistantMsg.tool_calls;
+
+    if (assistantMsg.content) {
+      lastPartialContent = assistantMsg.content.trim();
+    }
 
     messages.push({
       role: 'assistant',
@@ -184,7 +230,14 @@ export async function runBarberAgent(input: AgentInput): Promise<AgentOutput> {
 
       if (name === 'escalate_to_human') escalated = true;
 
-      const args = JSON.parse(toolCall.function.arguments || '{}') as Record<string, unknown>;
+      let args: Record<string, unknown>;
+      try {
+        args = JSON.parse(toolCall.function.arguments || '{}') as Record<string, unknown>;
+      } catch {
+        args = {};
+        logger.warn({ toolName: name, raw: toolCall.function.arguments }, 'Failed to parse tool args');
+      }
+
       const toolResult = await executor.execute(name, args);
 
       messages.push({
@@ -196,7 +249,7 @@ export async function runBarberAgent(input: AgentInput): Promise<AgentOutput> {
   }
 
   if (!finalReply) {
-    finalReply = 'Lo siento, tuve un problema procesando tu solicitud. ¿Puedes intentarlo de nuevo?';
+    finalReply = lastPartialContent || 'Lo siento, tuve un problema procesando tu solicitud. ¿Puedes intentarlo de nuevo?';
   }
 
   return {

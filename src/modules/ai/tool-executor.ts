@@ -204,22 +204,22 @@ export class ToolExecutor {
       };
     }
 
-    const { data: appointments } = await this.appointmentsRepo.list(this.shopId, {
-      page: 1,
-      limit: 5,
-    });
-
-    const clientAppts = appointments
-      .filter((a) => a.client_id === client.id)
-      .filter((a) => !['cancelled', 'no_show'].includes(a.status))
-      .filter((a) => new Date(a.scheduled_at) >= new Date());
+    const { data: allAppointments } = await this.db
+      .from('appointments')
+      .select('id, scheduled_at, status, service_id, barber_id')
+      .eq('shop_id', this.shopId)
+      .eq('client_id', client.id)
+      .not('status', 'in', '("cancelled","no_show")')
+      .gte('scheduled_at', new Date().toISOString())
+      .order('scheduled_at', { ascending: true })
+      .limit(10);
 
     return {
       success: true,
       data: {
         found: true,
         client_name: client.full_name,
-        appointments: clientAppts.map((a) => ({
+        appointments: (allAppointments ?? []).map((a: { id: string; scheduled_at: string; status: string }) => ({
           id: a.id,
           scheduled_at: a.scheduled_at,
           status: a.status,
