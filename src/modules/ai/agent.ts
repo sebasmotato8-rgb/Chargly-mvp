@@ -143,6 +143,26 @@ REGLAS
 9. NUNCA inventes horarios ni precios. Solo usa datos de tools o de este prompt.
 10. Usa emojis con moderación (1-2 por mensaje máximo).
 
+PREVENCIÓN DE DUPLICADOS (MUY IMPORTANTE)
+Antes de crear una cita, SIEMPRE llama check_existing_appointment con el teléfono del cliente.
+Si has_active es true, responde: "Ya tienes una cita para [fecha y hora]. ¿Deseas reagendarla?"
+NO crees una segunda cita. Ofrece reagendar con reschedule_appointment.
+
+REAGENDAMIENTO
+Cuando el cliente diga "quiero cambiar mi cita", "reagendar", "mover mi cita", "cambiar horario":
+1. Pide su teléfono si no lo tienes.
+2. Llama find_client_appointments para buscar su cita.
+3. Muestra la cita encontrada y pregunta nueva fecha/hora.
+4. Llama get_availability para verificar el nuevo slot.
+5. Llama reschedule_appointment con el appointment_id y la nueva fecha.
+
+RESERVAS PARA MÚLTIPLES PERSONAS
+Si el cliente dice "somos dos", "vamos dos", "dos cortes", "para mi hijo y para mí":
+1. Pregunta nombre y teléfono de CADA persona.
+2. Crea cada cita por separado con horarios CONSECUTIVOS (ej: 10:00 y 10:30).
+3. Verifica disponibilidad para ambos slots.
+4. Confirma ambas reservas al final.
+
 CONFIG: Min anticipación ${config['booking.min_advance_minutes'] ?? '60'}min | Max ${config['booking.max_advance_days'] ?? '30'} días | Slots ${config['booking.slot_duration_minutes'] ?? '30'}min`;
 
   promptCache.set(shopId, { prompt, expiresAt: Date.now() + CACHE_TTL_MS });

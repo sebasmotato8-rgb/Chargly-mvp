@@ -68,6 +68,8 @@ chat.post('/chat', aiLimiter, aiController.chat);
 const dashboardPublic = Router();
 dashboardPublic.use(chatAuthMiddleware);
 dashboardPublic.get('/appointments', appointmentsController.dashboardList);
+dashboardPublic.patch('/appointments/:id/status', appointmentsController.dashboardUpdateStatus);
+dashboardPublic.delete('/appointments/:id', appointmentsController.dashboardDelete);
 
 router.use('/public', chat);
 router.use('/public/dashboard', dashboardPublic);

@@ -62,6 +62,9 @@ export class ToolExecutor {
         case 'get_business_info':
           return this.getBusinessInfo();
 
+        case 'check_existing_appointment':
+          return this.checkExistingAppointment(toolInput);
+
         case 'escalate_to_human':
           return this.escalateToHuman(toolInput);
 
@@ -280,5 +283,43 @@ export class ToolExecutor {
           'He notificado a nuestro equipo. Un miembro de Zac Barber se pondrá en contacto contigo pronto.',
       },
     };
+  }
+
+  private async checkExistingAppointment(input: Record<string, unknown>): Promise<ToolResult> {
+    const client = await this.clientsRepo.findByPhone(
+      input['client_phone'] as string,
+      this.shopId
+    );
+
+    if (!client) {
+      return { success: true, data: { has_active: false, message: 'Cliente nuevo, puede reservar.' } };
+    }
+
+    const { data: active } = await this.db
+      .from('appointments')
+      .select('id, scheduled_at, status, service_id, services(name)')
+      .eq('shop_id', this.shopId)
+      .eq('client_id', client.id)
+      .in('status', ['pending', 'confirmed'])
+      .gte('scheduled_at', new Date().toISOString())
+      .order('scheduled_at', { ascending: true })
+      .limit(1);
+
+    if (active && active.length > 0) {
+      const apt = active[0] as unknown as { id: string; scheduled_at: string; status: string; services: { name: string } | null };
+      return {
+        success: true,
+        data: {
+          has_active: true,
+          appointment_id: apt.id,
+          scheduled_at: apt.scheduled_at,
+          service: apt.services?.name ?? 'Servicio',
+          label: new Date(apt.scheduled_at).toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'full', timeStyle: 'short' }),
+          message: `El cliente ya tiene una cita activa. Ofrece reagendar en vez de crear otra.`,
+        },
+      };
+    }
+
+    return { success: true, data: { has_active: false, message: 'No tiene citas activas, puede reservar.' } };
   }
 }

@@ -140,4 +140,41 @@ export const appointmentsController = {
       next(err);
     }
   },
+
+  async dashboardUpdateStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const shopId = req.ctx.shopId;
+      const id = req.params['id'];
+      const { status, reason } = req.body as { status: string; reason?: string };
+      const update: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
+      if (reason) update['cancellation_reason'] = reason;
+      const { data, error } = await supabaseService
+        .from('appointments')
+        .update(update)
+        .eq('id', id)
+        .eq('shop_id', shopId)
+        .select()
+        .single();
+      if (error) { next(error); return; }
+      ok(res, data);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async dashboardDelete(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const shopId = req.ctx.shopId;
+      const id = req.params['id'];
+      const { error } = await supabaseService
+        .from('appointments')
+        .delete()
+        .eq('id', id)
+        .eq('shop_id', shopId);
+      if (error) { next(error); return; }
+      ok(res, { deleted: true });
+    } catch (err) {
+      next(err);
+    }
+  },
 };

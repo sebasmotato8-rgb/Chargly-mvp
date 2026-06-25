@@ -191,4 +191,24 @@ export const BARBER_TOOLS: Groq.Chat.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'check_existing_appointment',
+      description:
+        'Verifica si un cliente ya tiene una cita activa (pending o confirmed). ' +
+        'SIEMPRE llama esto ANTES de book_appointment con el teléfono del cliente. ' +
+        'Si ya tiene cita activa, NO crees otra — ofrece reagendar la existente.',
+      parameters: {
+        type: 'object',
+        properties: {
+          client_phone: {
+            type: 'string',
+            description: 'Teléfono del cliente en formato E.164.',
+          },
+        },
+        required: ['client_phone'],
+      },
+    },
+  },
 ];
