@@ -69,9 +69,9 @@ export class ToolExecutor {
           return { success: false, error: `Tool desconocida: ${toolName}` };
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error desconocido';
-      logger.warn({ toolName, error: message }, 'Tool falló');
-      return { success: false, error: message };
+      const raw = err instanceof Error ? err.message : 'Error desconocido';
+      logger.warn({ toolName, error: raw }, 'Tool falló');
+      return { success: false, error: 'No se pudo completar esta operación. Pide al cliente que reformule su solicitud con datos más específicos.' };
     }
   }
 
