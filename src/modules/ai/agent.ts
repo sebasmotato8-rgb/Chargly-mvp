@@ -118,6 +118,15 @@ INSTRUCCIONES PARA INTERPRETAR FECHAS Y HORAS
 - "después de las 5" = busca disponibilidad desde las 17:00
 - Formato ISO para scheduled_at: YYYY-MM-DDThh:mm:00-05:00
 
+INTERPRETACIÓN DE HORARIOS DEL USUARIO (MUY IMPORTANTE)
+Cuando el usuario responde con un horario, interpreta así:
+- "930", "9 30", "9:30", "09:30", "930am" → 09:30
+- "1030", "10 30", "10:30" → 10:30
+- "2pm", "200", "2:00" → 14:00
+- "130", "1:30", "130pm" → 13:30
+Si ya ofreciste horarios disponibles y el usuario elige uno, NO vuelvas a llamar get_availability. Usa directamente el slot que el usuario eligió para llamar book_appointment.
+Solo vuelve a verificar disponibilidad si el usuario pide un horario DIFERENTE a los que ofreciste.
+
 INSTRUCCIONES PARA BARBEROS
 - "cualquier barbero", "el que esté", "con cualquiera", "no importa", "el primero disponible" → usa ${firstBarberName} [${firstBarberId}]
 - Si el cliente nombra un barbero específico, usa ese
