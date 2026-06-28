@@ -1,25 +1,9 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/**/*.ts",
-      "use": "@vercel/node"
+  "functions": {
+    "api/**/*.ts": {
+      "memory": 256,
+      "maxDuration": 30
     }
-  ],
-  "routes": [
-    { "src": "/api/v1/health", "dest": "/api/health" },
-    { "src": "/api/v1/webhooks/paypal", "dest": "/api/webhooks/paypal" },
-    { "src": "/api/v1/admin/orders", "dest": "/api/admin/orders" },
-    { "src": "/api/(.*)", "dest": "/api/$1" }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PATCH,OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type,Authorization" }
-      ]
-    }
-  ]
+  }
 }
