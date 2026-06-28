@@ -12,11 +12,13 @@ const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
 // ── Auth ─────────────────────────────────────────────────────
 function authenticate(req: VercelRequest): boolean {
   const auth = req.headers.authorization;
-  const queryPass = req.query.password as string | undefined;
+  const raw = req.query.password;
+  const queryPass = Array.isArray(raw) ? raw[0] : raw;
 
   if (auth?.startsWith('Basic ')) {
     const decoded = Buffer.from(auth.slice(6), 'base64').toString();
-    const [, password] = decoded.split(':');
+    const parts = decoded.split(':');
+    const password = parts.slice(1).join(':');
     return password === ADMIN_PASSWORD;
   }
   if (auth?.startsWith('Bearer ')) return auth.slice(7) === ADMIN_PASSWORD;
