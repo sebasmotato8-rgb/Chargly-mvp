@@ -15,7 +15,7 @@ export const logger = pino({
         }
       : undefined,
   base: {
-    service: 'zac-barber-backend',
+    service: 'chargly-backend',
     env: env.NODE_ENV,
   },
   serializers: {

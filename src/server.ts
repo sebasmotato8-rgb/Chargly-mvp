@@ -9,7 +9,7 @@ const server = app.listen(env.PORT, () => {
       env: env.NODE_ENV,
       prefix: env.API_PREFIX,
     },
-    '🚀 Zac Barber Backend iniciado'
+    '🚀 Chargly Backend iniciado'
   );
 });
 

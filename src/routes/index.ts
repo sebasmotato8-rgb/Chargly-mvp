@@ -9,13 +9,31 @@ import {
   configController,
   aiController,
 } from '../controllers/index';
+import { webhooksController } from '../controllers/webhooks.controller';
+import { adminController } from '../controllers/admin.controller';
 
 const router = Router();
 
 // ── Health check ─────────────────────────────────────────────
 router.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'zac-barber-backend', ts: new Date().toISOString() });
+  res.json({ status: 'ok', service: 'chargly-backend', ts: new Date().toISOString() });
 });
+
+// ══════════════════════════════════════════════════════════════
+// CHARGLY E-COMMERCE — Webhooks, Admin
+// ══════════════════════════════════════════════════════════════
+
+// ── PayPal Webhook (no auth, PayPal signature verification) ──
+router.post('/webhooks/paypal', webhooksController.paypal);
+
+// ── Admin Panel ──────────────────────────────────────────────
+const admin = Router();
+admin.use(adminController.authMiddleware);
+admin.get('/orders', adminController.ordersPage);
+admin.get('/orders/api', adminController.ordersList);
+admin.patch('/orders/:id/status', adminController.updateStatus);
+admin.patch('/orders/:id/tracking', adminController.updateTracking);
+router.use('/admin', admin);
 
 // ══════════════════════════════════════════════════════════════
 // RUTAS PROTEGIDAS — requieren JWT de Supabase Auth

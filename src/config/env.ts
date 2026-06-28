@@ -23,6 +23,23 @@ const envSchema = z.object({
   AI_RATE_LIMIT_MAX: z.coerce.number().default(20),
 
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
+
+  // ── Chargly E-commerce ─────────────────────────────
+  PAYPAL_CLIENT_ID: z.string().default(''),
+  PAYPAL_CLIENT_SECRET: z.string().default(''),
+  PAYPAL_WEBHOOK_ID: z.string().default(''),
+  PAYPAL_MODE: z.enum(['sandbox', 'live']).default('live'),
+
+  CJ_API_KEY: z.string().default(''),
+  CJ_PRODUCT_SKU: z.string().default('CJCD135893008HS'),
+
+  SMTP_HOST: z.string().default('smtp.gmail.com'),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_USER: z.string().default(''),
+  SMTP_PASS: z.string().default(''),
+  SMTP_FROM_NAME: z.string().default('Chargly'),
+
+  ADMIN_PASSWORD: z.string().default('chargly2026'),
 });
 
 const parsed = envSchema.safeParse(process.env);
