@@ -1,36 +1,15 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { env } from '../../config/env';
 import { logger } from '../../config/logger';
 import type { OrderRow } from './orders.repository';
 
-function createTransport() {
-  if (!env.SMTP_USER || !env.SMTP_PASS) {
-    logger.warn('SMTP credentials not configured — emails will be skipped');
-    return null;
-  }
-
-  return nodemailer.createTransport({
-    host: env.SMTP_HOST,
-    port: env.SMTP_PORT,
-    secure: false,
-    auth: {
-      user: env.SMTP_USER,
-      pass: env.SMTP_PASS,
-    },
-  });
-}
-
-const transporter = createTransport();
+const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
 
 export async function sendOrderConfirmation(order: OrderRow): Promise<boolean> {
-  if (!transporter) {
-    logger.warn({ orderId: order.id }, 'Skipping email — SMTP not configured');
+  if (!resend) {
+    logger.warn({ orderId: order.id }, 'Skipping email — RESEND_API_KEY not configured');
     return false;
   }
-
-  const itemsList = (order.items as Array<{ name?: string; quantity?: number }>)
-    .map(i => `  • ${i.quantity || 1}x ${i.name || 'Chargly Power Bank'}`)
-    .join('\n');
 
   const html = `
 <!DOCTYPE html>
@@ -100,14 +79,13 @@ export async function sendOrderConfirmation(order: OrderRow): Promise<boolean> {
 </html>`;
 
   try {
-    await transporter.sendMail({
-      from: `"${env.SMTP_FROM_NAME}" <${env.SMTP_USER}>`,
+    await resend.emails.send({
+      from: 'Chargly <soporte@chargly.shop>',
       to: order.customer_email,
       subject: `✓ Pedido confirmado — #${order.paypal_order_id}`,
       html,
-      text: `¡Pedido Confirmado!\n\nHola ${order.customer_name},\n\nTu pedido #${order.paypal_order_id} por $${Number(order.amount).toFixed(2)} ${order.currency} ha sido procesado.\n\nProductos:\n${itemsList}\n\nDirección de envío:\n${order.shipping_address}\n${order.shipping_city}, ${order.shipping_country}\n\nEntrega estimada: 15-20 días hábiles.\n\nSoporte: soporte@chargly.shop`,
     });
-    logger.info({ orderId: order.id, email: order.customer_email }, 'Confirmation email sent');
+    logger.info({ orderId: order.id, email: order.customer_email }, 'Confirmation email sent via Resend');
     return true;
   } catch (err) {
     logger.error({ err, orderId: order.id }, 'Failed to send confirmation email');

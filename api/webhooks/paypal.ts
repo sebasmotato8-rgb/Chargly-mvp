@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 // ── Env ──────────────────────────────────────────────────────
 const SUPABASE_URL = process.env.SUPABASE_URL!;
@@ -11,11 +11,7 @@ const PAYPAL_WEBHOOK_ID = process.env.PAYPAL_WEBHOOK_ID || '';
 const PAYPAL_MODE = process.env.PAYPAL_MODE || 'live';
 const CJ_API_KEY = process.env.CJ_API_KEY || '';
 const CJ_PRODUCT_SKU = process.env.CJ_PRODUCT_SKU || 'CJCD135893008HS';
-const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
-const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587');
-const SMTP_USER = process.env.SMTP_USER || '';
-const SMTP_PASS = process.env.SMTP_PASS || '';
-const SMTP_FROM_NAME = process.env.SMTP_FROM_NAME || 'Chargly';
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 
 const PAYPAL_BASE = PAYPAL_MODE === 'live'
   ? 'https://api-m.paypal.com'
@@ -64,11 +60,8 @@ async function verifySignature(headers: Record<string, string | string[] | undef
 
 // ── Email helper ─────────────────────────────────────────────
 async function sendConfirmation(order: any): Promise<void> {
-  if (!SMTP_USER || !SMTP_PASS) return;
-  const transport = nodemailer.createTransport({
-    host: SMTP_HOST, port: SMTP_PORT, secure: false,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
-  });
+  if (!RESEND_API_KEY) return;
+  const resend = new Resend(RESEND_API_KEY);
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#FAFAF8;font-family:Inter,Arial,sans-serif;">
@@ -107,8 +100,8 @@ async function sendConfirmation(order: any): Promise<void> {
   </div>
 </div></body></html>`;
 
-  await transport.sendMail({
-    from: `"${SMTP_FROM_NAME}" <${SMTP_USER}>`,
+  await resend.emails.send({
+    from: 'Chargly <soporte@chargly.shop>',
     to: order.customer_email,
     subject: `✓ Pedido confirmado — #${order.paypal_order_id}`,
     html,

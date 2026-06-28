@@ -33,11 +33,7 @@ const envSchema = z.object({
   CJ_API_KEY: z.string().default(''),
   CJ_PRODUCT_SKU: z.string().default('CJCD135893008HS'),
 
-  SMTP_HOST: z.string().default('smtp.gmail.com'),
-  SMTP_PORT: z.coerce.number().default(587),
-  SMTP_USER: z.string().default(''),
-  SMTP_PASS: z.string().default(''),
-  SMTP_FROM_NAME: z.string().default('Chargly'),
+  RESEND_API_KEY: z.string().default(''),
 
   ADMIN_PASSWORD: z.string().default('chargly2026'),
 });
